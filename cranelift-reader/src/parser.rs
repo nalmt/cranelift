@@ -1768,6 +1768,11 @@ impl<'a> Parser<'a> {
         let ebb_num = self.match_ebb("expected EBB header")?;
         let ebb = ctx.add_ebb(ebb_num, self.loc)?;
 
+        // after some quick benchmarks a program should never have more than 3M ebbs
+        if ebb_num.as_u32() > 3000000 {
+            return Err(self.error("too many ebbs"));
+        }
+
         if !self.optional(Token::Colon) {
             // ebb-header ::= Ebb(ebb) [ * ebb-params ] ":"
             self.parse_ebb_params(ctx, ebb)?;
@@ -2964,6 +2969,24 @@ mod tests {
 
         assert_eq!(location.line_number, 3);
         assert_eq!(message, "duplicate entity: ebb0");
+        assert!(!is_warning);
+    }
+
+    #[test]
+    fn ebbs_number() {
+        let ParseError {
+            location,
+            message,
+            is_warning,
+        } = Parser::new(
+            "function %a() {
+                ebb47777777:",
+        )
+        .parse_function(None)
+        .unwrap_err();
+
+        assert_eq!(location.line_number, 2);
+        assert_eq!(message, "too many ebbs");
         assert!(!is_warning);
     }
 
