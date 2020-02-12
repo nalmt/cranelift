@@ -16,6 +16,7 @@ use cranelift_frontend::{FunctionBuilder, FunctionBuilderContext, Variable};
 use log::info;
 use wasmparser::{self, BinaryReader};
 
+static mut MAX: usize = 0;
 /// WebAssembly to Cranelift IR function translator.
 ///
 /// A `FuncTranslator` is used to translate a binary WebAssembly function into Cranelift IR guided
@@ -108,6 +109,7 @@ impl FuncTranslator {
         self.state.initialize(&builder.func.signature, exit_block);
 
         parse_local_decls(&mut reader, &mut builder, num_params, environ)?;
+
         parse_function_body(
             module_translation_state,
             reader,
@@ -117,6 +119,14 @@ impl FuncTranslator {
         )?;
 
         builder.finalize();
+
+        unsafe {
+            if func.dfg.num_ebbs() > MAX {
+                MAX = func.dfg.num_ebbs();
+                println!("MAX {}", MAX);
+            }
+        }
+
         Ok(())
     }
 }
@@ -231,6 +241,7 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
     while !state.control_stack.is_empty() {
         builder.set_srcloc(cur_srcloc(&reader));
         let op = reader.read_operator()?;
+
         environ.before_translate_operator(&op, builder, state)?;
         translate_operator(module_translation_state, &op, builder, state, environ)?;
         environ.after_translate_operator(&op, builder, state)?;
@@ -265,7 +276,6 @@ fn parse_function_body<FE: FuncEnvironment + ?Sized>(
 
     Ok(())
 }
-
 /// Get the current source location from a reader.
 fn cur_srcloc(reader: &BinaryReader) -> ir::SourceLoc {
     // We record source locations as byte code offsets relative to the beginning of the file.
